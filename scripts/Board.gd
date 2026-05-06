@@ -4,6 +4,7 @@ class_name Board
 signal score_changed(score: int)
 signal combo_changed(combo: int)
 signal danger_changed(value: float)
+signal game_over(final_score: int)
 
 const WIDTH := 8
 const HEIGHT := 10
@@ -11,9 +12,11 @@ const CELL_SIZE := Vector2i(120, 120)
 const PIECE_SCENE := preload("res://scenes/Piece.tscn")
 
 @export var spawn_colors: int = 5
-@export var fall_speed: float = 8.0
-@export var danger_rise_per_second: float = 0.035
-@export var danger_drop_per_clear: float = 0.08
+@export var danger_rise_per_second: float = 0.03
+@export var danger_drop_per_clear: float = 0.1
+@export var pressure_interval_seconds: float = 7.0
+@export var speed_step_interval_seconds: float = 30.0
+@export var speed_multiplier_per_step: float = 1.15
 
 var grid: Array = []
 var selected_piece: Piece
@@ -21,19 +24,58 @@ var score := 0
 var combo := 0
 var danger := 0.0
 var is_resolving := false
+var is_playing := false
+var is_game_over := false
+
+var time_without_match := 0.0
+var elapsed_play_time := 0.0
+var speed_level := 0
 
 func _ready() -> void:
 	randomize()
+	start_new_run()
+
+func _process(delta: float) -> void:
+	if not is_playing or is_resolving or is_game_over:
+		return
+
+	elapsed_play_time += delta
+	var expected_speed_level := int(elapsed_play_time / speed_step_interval_seconds)
+	if expected_speed_level != speed_level:
+		speed_level = expected_speed_level
+
+	var speed_factor := _speed_factor()
+	danger = clamp(danger + danger_rise_per_second * speed_factor * delta, 0.0, 1.0)
+	danger_changed.emit(danger)
+
+	time_without_match += delta
+	var interval := pressure_interval_seconds / speed_factor
+	if time_without_match >= interval:
+		time_without_match = 0.0
+		_push_pressure_row_from_top()
+
+func start_new_run() -> void:
+	_clear_board_nodes()
 	_initialize_grid()
+	score = 0
+	combo = 0
+	danger = 0.0
+	time_without_match = 0.0
+	elapsed_play_time = 0.0
+	speed_level = 0
+	is_resolving = false
+	is_game_over = false
+	is_playing = false
+	selected_piece = null
 	_spawn_initial_board()
 	_emit_ui()
 	call_deferred("_resolve_board_loop")
 
-func _process(delta: float) -> void:
-	if is_resolving:
+func set_playing(enabled: bool) -> void:
+	if is_game_over:
+		is_playing = false
 		return
-	danger = clamp(danger + danger_rise_per_second * delta, 0.0, 1.0)
-	danger_changed.emit(danger)
+	is_playing = enabled
 
 func _initialize_grid() -> void:
 	grid.resize(HEIGHT)
@@ -67,7 +109,7 @@ func _grid_to_position(x: int, y: int) -> Vector2:
 	return Vector2(x * CELL_SIZE.x + CELL_SIZE.x / 2.0, y * CELL_SIZE.y + CELL_SIZE.y / 2.0)
 
 func _on_piece_selected(piece: Piece) -> void:
-	if is_resolving:
+	if not is_playing or is_resolving or is_game_over:
 		return
 	var coords := _find_piece(piece)
 	if coords == Vector2i(-1, -1):
@@ -143,6 +185,7 @@ func _resolve_board_loop() -> void:
 		score_changed.emit(score)
 		danger = clamp(danger - danger_drop_per_clear, 0.0, 1.0)
 		danger_changed.emit(danger)
+		time_without_match = 0.0
 		await get_tree().create_timer(0.08).timeout
 		_apply_gravity()
 		await get_tree().create_timer(0.12).timeout
@@ -235,6 +278,42 @@ func _creates_match_at(x: int, y: int, color_id: int) -> bool:
 		if grid[y - 1][x].color_id == color_id and grid[y - 2][x].color_id == color_id:
 			return true
 	return false
+
+func _push_pressure_row_from_top() -> void:
+	for x in WIDTH:
+		if grid[HEIGHT - 1][x] != null:
+			_trigger_game_over()
+			return
+
+	for y in range(HEIGHT - 1, 0, -1):
+		for x in WIDTH:
+			var moving_piece: Piece = grid[y - 1][x]
+			grid[y][x] = moving_piece
+			if moving_piece:
+				moving_piece.create_tween().tween_property(moving_piece, "position", _grid_to_position(x, y), 0.1)
+
+	for x in WIDTH:
+		var piece := _create_piece(x, 0, false)
+		grid[0][x] = piece
+		piece.position = _grid_to_position(x, 0)
+
+	await get_tree().create_timer(0.12).timeout
+	await _resolve_board_loop()
+
+func _trigger_game_over() -> void:
+	if is_game_over:
+		return
+	is_game_over = true
+	is_playing = false
+	game_over.emit(score)
+
+func _clear_board_nodes() -> void:
+	for child in get_children():
+		if child is Piece:
+			child.queue_free()
+
+func _speed_factor() -> float:
+	return pow(speed_multiplier_per_step, speed_level)
 
 func _emit_ui() -> void:
 	score_changed.emit(score)
