@@ -9,6 +9,8 @@ enum GameState {
 	SHOP
 }
 
+const BOARD_TOP_MARGIN := 360.0
+
 @onready var board: Board = $Board
 @onready var hud: HUD = $HUD
 
@@ -24,7 +26,8 @@ func _ready() -> void:
 	progression = ProgressionManager.new()
 	add_child(progression)
 
-	board.position = Vector2(60, 360)
+	_update_board_layout()
+	get_viewport().size_changed.connect(_update_board_layout)
 	board.score_changed.connect(hud.set_score)
 	board.combo_changed.connect(hud.set_combo)
 	board.danger_changed.connect(hud.set_danger)
@@ -48,6 +51,12 @@ func _ready() -> void:
 
 	_refresh_meta_ui()
 	_set_state(GameState.MENU)
+
+func _update_board_layout() -> void:
+	var viewport_size := get_viewport_rect().size
+	var board_width := float(Board.WIDTH * Board.CELL_SIZE.x)
+	var x := max(0.0, (viewport_size.x - board_width) * 0.5)
+	board.position = Vector2(x, BOARD_TOP_MARGIN)
 
 func _refresh_meta_ui() -> void:
 	hud.set_coins(progression.coins)
