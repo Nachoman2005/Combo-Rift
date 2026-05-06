@@ -1,0 +1,18 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="Combo Rift"
+config/description="Puzzle arcade match-3 + supervivencia en tiempo real"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6")
+
+[display]
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+renderer/rendering_method="mobile"
+textures/canvas_textures/default_texture_filter=0
