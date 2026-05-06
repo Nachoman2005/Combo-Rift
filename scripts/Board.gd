@@ -409,6 +409,25 @@ func _trigger_game_over() -> void:
 	is_playing = false
 	game_over.emit(score)
 
+
+func revive_player_once() -> bool:
+	if not is_game_over:
+		return false
+	is_game_over = false
+	is_playing = true
+	danger = min(danger, 0.6)
+	danger_changed.emit(danger)
+	_clear_bottom_row()
+	return true
+
+func _clear_bottom_row() -> void:
+	for x in WIDTH:
+		var piece: Piece = grid[HEIGHT - 1][x]
+		if piece:
+			piece.queue_free()
+		grid[HEIGHT - 1][x] = null
+	_apply_gravity()
+	_spawn_new_pieces()
 func _clear_board_nodes() -> void:
 	for child in get_children():
 		if child is Piece:
