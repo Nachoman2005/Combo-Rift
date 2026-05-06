@@ -5,13 +5,15 @@ enum GameState {
 	PLAYING,
 	PAUSED,
 	GAME_OVER,
-	CREDITS
+	CREDITS,
+	SHOP
 }
 
 @onready var board: Board = $Board
 @onready var hud: HUD = $HUD
 
 var ads_manager: AdsManager
+var progression: ProgressionManager
 var state: GameState = GameState.MENU
 var finished_runs: int = 0
 var used_rewarded_continue: bool = false
@@ -19,15 +21,23 @@ var used_rewarded_continue: bool = false
 func _ready() -> void:
 	ads_manager = AdsManager.new()
 	add_child(ads_manager)
+	progression = ProgressionManager.new()
+	add_child(progression)
 
 	board.position = Vector2(60, 360)
 	board.score_changed.connect(hud.set_score)
 	board.combo_changed.connect(hud.set_combo)
 	board.danger_changed.connect(hud.set_danger)
 	board.game_over.connect(_on_board_game_over)
+	board.matches_cleared.connect(_on_matches_cleared)
+	board.combo_reached.connect(_on_combo_reached)
+	board.enemies_defeated.connect(_on_enemy_defeated)
 
 	hud.start_pressed.connect(_on_start_pressed)
 	hud.shop_pressed.connect(_on_shop_pressed)
+	hud.close_shop_pressed.connect(_on_close_shop_pressed)
+	hud.buy_powerup_pressed.connect(_on_buy_powerup_pressed)
+	hud.use_powerup_pressed.connect(_on_use_powerup_pressed)
 	hud.credits_pressed.connect(_on_credits_pressed)
 	hud.close_credits_pressed.connect(_on_close_credits_pressed)
 	hud.pause_pressed.connect(_on_pause_pressed)
@@ -36,7 +46,13 @@ func _ready() -> void:
 	hud.back_to_menu_pressed.connect(_on_back_to_menu_pressed)
 	hud.continue_ad_pressed.connect(_on_continue_ad_pressed)
 
+	_refresh_meta_ui()
 	_set_state(GameState.MENU)
+
+func _refresh_meta_ui() -> void:
+	hud.set_coins(progression.coins)
+	hud.set_missions(progression.mission_summary())
+	hud.set_powerup_counts(progression.powerups)
 
 func _set_state(new_state: GameState) -> void:
 	state = new_state
@@ -59,12 +75,36 @@ func _set_state(new_state: GameState) -> void:
 		GameState.CREDITS:
 			board.set_playing(false)
 			hud.show_credits()
+		GameState.SHOP:
+			board.set_playing(false)
+			hud.show_shop()
 
 func _on_start_pressed() -> void:
 	_set_state(GameState.PLAYING)
 
 func _on_shop_pressed() -> void:
-	print("[UI] Tienda próximamente")
+	_set_state(GameState.SHOP)
+
+func _on_close_shop_pressed() -> void:
+	_set_state(GameState.MENU)
+
+func _on_buy_powerup_pressed(powerup_id: String) -> void:
+	progression.buy_powerup(powerup_id)
+	_refresh_meta_ui()
+
+func _on_use_powerup_pressed(powerup_id: String) -> void:
+	if state != GameState.PLAYING:
+		return
+	if not progression.consume_powerup(powerup_id):
+		return
+	match powerup_id:
+		"bomb":
+			board.activate_bomb()
+		"freeze":
+			board.activate_freeze()
+		"clear_column":
+			board.activate_clear_column()
+	_refresh_meta_ui()
 
 func _on_credits_pressed() -> void:
 	_set_state(GameState.CREDITS)
@@ -97,7 +137,21 @@ func _on_continue_ad_pressed() -> void:
 
 func _on_board_game_over(final_score: int) -> void:
 	finished_runs += 1
+	progression.add_score_rewards(final_score)
+	_refresh_meta_ui()
 	if finished_runs % 3 == 0:
 		ads_manager.show_interstitial()
 	_set_state(GameState.GAME_OVER)
 	hud.show_game_over(final_score, not used_rewarded_continue)
+
+func _on_matches_cleared(amount: int) -> void:
+	progression.add_matches(amount)
+	_refresh_meta_ui()
+
+func _on_combo_reached(value: int) -> void:
+	progression.register_combo(value)
+	_refresh_meta_ui()
+
+func _on_enemy_defeated(amount: int) -> void:
+	progression.add_enemies_defeated(amount)
+	_refresh_meta_ui()

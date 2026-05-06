@@ -5,6 +5,9 @@ signal score_changed(score: int)
 signal combo_changed(combo: int)
 signal danger_changed(value: float)
 signal game_over(final_score: int)
+signal matches_cleared(amount: int)
+signal combo_reached(value: int)
+signal enemies_defeated(amount: int)
 
 const WIDTH := 8
 const HEIGHT := 10
@@ -35,6 +38,7 @@ var time_without_match := 0.0
 var elapsed_play_time := 0.0
 var speed_level := 0
 var enemy_spawn_timer := 0.0
+var freeze_timer := 0.0
 
 func _ready() -> void:
 	randomize()
@@ -50,7 +54,10 @@ func _process(delta: float) -> void:
 		speed_level = expected_speed_level
 
 	var speed_factor := _speed_factor()
-	danger = clamp(danger + danger_rise_per_second * speed_factor * delta, 0.0, 1.0)
+	if freeze_timer > 0.0:
+		freeze_timer = max(0.0, freeze_timer - delta)
+	else:
+		danger = clamp(danger + danger_rise_per_second * speed_factor * delta, 0.0, 1.0)
 	danger_changed.emit(danger)
 
 	time_without_match += delta
@@ -74,6 +81,7 @@ func start_new_run() -> void:
 	elapsed_play_time = 0.0
 	speed_level = 0
 	enemy_spawn_timer = 0.0
+	freeze_timer = 0.0
 	is_resolving = false
 	is_game_over = false
 	is_playing = false
@@ -208,6 +216,8 @@ func _resolve_board_loop() -> void:
 		chain += 1
 		combo = chain
 		combo_changed.emit(combo)
+		combo_reached.emit(combo)
+		matches_cleared.emit(matches.size())
 		_apply_match_damage_to_enemies(matches)
 		_clear_matches(matches)
 		score += matches.size() * 10 * chain
@@ -294,6 +304,7 @@ func _apply_match_damage_to_enemies(matches: Array[Vector2i]) -> void:
 				if enemy.take_damage(1):
 					enemy.queue_free()
 					grid[adj.y][adj.x] = null
+					enemies_defeated.emit(1)
 
 func _is_inside(cell: Vector2i) -> bool:
 	return cell.x >= 0 and cell.x < WIDTH and cell.y >= 0 and cell.y < HEIGHT
@@ -440,3 +451,36 @@ func _emit_ui() -> void:
 	score_changed.emit(score)
 	combo_changed.emit(combo)
 	danger_changed.emit(danger)
+
+
+func activate_bomb() -> void:
+	if is_game_over:
+		return
+	var center := Vector2i(randi() % WIDTH, randi() % HEIGHT)
+	for yy in range(max(0, center.y - 1), min(HEIGHT, center.y + 2)):
+		for xx in range(max(0, center.x - 1), min(WIDTH, center.x + 2)):
+			var piece: Piece = grid[yy][xx]
+			if piece:
+				if piece is EnemyPiece:
+					enemies_defeated.emit(1)
+				piece.queue_free()
+				grid[yy][xx] = null
+	_apply_gravity()
+	_spawn_new_pieces()
+
+func activate_freeze(seconds: float = 8.0) -> void:
+	freeze_timer = max(freeze_timer, seconds)
+
+func activate_clear_column() -> void:
+	if is_game_over:
+		return
+	var column := randi() % WIDTH
+	for y in HEIGHT:
+		var piece: Piece = grid[y][column]
+		if piece:
+			if piece is EnemyPiece:
+				enemies_defeated.emit(1)
+			piece.queue_free()
+			grid[y][column] = null
+	_apply_gravity()
+	_spawn_new_pieces()

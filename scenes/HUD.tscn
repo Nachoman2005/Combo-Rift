@@ -9,10 +9,6 @@ script = ExtResource("1_hud")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 0.0
-offset_top = 0.0
-offset_right = 0.0
-offset_bottom = 0.0
 theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 24
 theme_override_constants/margin_right = 24
@@ -29,12 +25,34 @@ text = "Score: 0"
 layout_mode = 2
 text = "Combo: x0"
 
+[node name="CoinsLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Rift Coins: 0"
+
+[node name="MissionsLabel" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Diarias: Matches 0/20 | Combo x5 -- | Enemigos 0/10"
+
 [node name="DangerBar" type="ProgressBar" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 max_value = 100.0
-value = 0.0
 show_percentage = false
 custom_minimum_size = Vector2(520, 36)
+
+[node name="PowerupRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="BombUseButton" type="Button" parent="MarginContainer/VBoxContainer/PowerupRow"]
+layout_mode = 2
+text = "Bomba (0)"
+
+[node name="FreezeUseButton" type="Button" parent="MarginContainer/VBoxContainer/PowerupRow"]
+layout_mode = 2
+text = "Congelar (0)"
+
+[node name="ColumnUseButton" type="Button" parent="MarginContainer/VBoxContainer/PowerupRow"]
+layout_mode = 2
+text = "Limpiar Columna (0)"
 
 [node name="PauseButton" type="Button" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
@@ -71,6 +89,42 @@ text = "Tienda"
 layout_mode = 2
 text = "Créditos"
 
+[node name="ShopPanel" type="PanelContainer" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -140.0
+offset_right = 200.0
+offset_bottom = 140.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ShopPanel"]
+layout_mode = 2
+
+[node name="ShopTitle" type="Label" parent="ShopPanel/VBoxContainer"]
+layout_mode = 2
+text = "Tienda (offline)"
+horizontal_alignment = 1
+
+[node name="BuyBombButton" type="Button" parent="ShopPanel/VBoxContainer"]
+layout_mode = 2
+text = "Comprar Bomba - 120"
+
+[node name="BuyFreezeButton" type="Button" parent="ShopPanel/VBoxContainer"]
+layout_mode = 2
+text = "Comprar Congelar - 90"
+
+[node name="BuyColumnButton" type="Button" parent="ShopPanel/VBoxContainer"]
+layout_mode = 2
+text = "Comprar Limpiar Columna - 110"
+
+[node name="CloseShopButton" type="Button" parent="ShopPanel/VBoxContainer"]
+layout_mode = 2
+text = "Cerrar"
+
 [node name="PausePanel" type="PanelContainer" parent="."]
 visible = false
 anchors_preset = 8
@@ -85,12 +139,10 @@ offset_bottom = 70.0
 
 [node name="VBoxContainer" type="VBoxContainer" parent="PausePanel"]
 layout_mode = 2
-
 [node name="PausedLabel" type="Label" parent="PausePanel/VBoxContainer"]
 layout_mode = 2
 text = "Pausado"
 horizontal_alignment = 1
-
 [node name="ResumeButton" type="Button" parent="PausePanel/VBoxContainer"]
 layout_mode = 2
 text = "Continuar"
@@ -106,28 +158,22 @@ offset_left = -220.0
 offset_top = -150.0
 offset_right = 220.0
 offset_bottom = 150.0
-
 [node name="VBoxContainer" type="VBoxContainer" parent="GameOverPanel"]
 layout_mode = 2
-
 [node name="GameOverLabel" type="Label" parent="GameOverPanel/VBoxContainer"]
 layout_mode = 2
 text = "GAME OVER"
 horizontal_alignment = 1
-
 [node name="FinalScoreLabel" type="Label" parent="GameOverPanel/VBoxContainer"]
 layout_mode = 2
 text = "Score final: 0"
 horizontal_alignment = 1
-
 [node name="ContinueAdButton" type="Button" parent="GameOverPanel/VBoxContainer"]
 layout_mode = 2
 text = "Continuar viendo anuncio"
-
 [node name="RetryButton" type="Button" parent="GameOverPanel/VBoxContainer"]
 layout_mode = 2
 text = "Reintentar"
-
 [node name="MenuButton" type="Button" parent="GameOverPanel/VBoxContainer"]
 layout_mode = 2
 text = "Volver al menú"
@@ -143,25 +189,20 @@ offset_left = -240.0
 offset_top = -140.0
 offset_right = 240.0
 offset_bottom = 140.0
-
 [node name="VBoxContainer" type="VBoxContainer" parent="CreditsPanel"]
 layout_mode = 2
-
 [node name="CreditsTitle" type="Label" parent="CreditsPanel/VBoxContainer"]
 layout_mode = 2
 text = "Créditos"
 horizontal_alignment = 1
-
 [node name="StudioLabel" type="Label" parent="CreditsPanel/VBoxContainer"]
 layout_mode = 2
 text = "Half U Forward Games"
 horizontal_alignment = 1
-
 [node name="IdeaLabel" type="Label" parent="CreditsPanel/VBoxContainer"]
 layout_mode = 2
 text = "Based on an idea by Ignacio Duarte"
 horizontal_alignment = 1
-
 [node name="CloseCreditsButton" type="Button" parent="CreditsPanel/VBoxContainer"]
 layout_mode = 2
 text = "Volver"
