@@ -10,6 +10,7 @@ const WIDTH := 8
 const HEIGHT := 10
 const CELL_SIZE := Vector2i(120, 120)
 const PIECE_SCENE := preload("res://scenes/Piece.tscn")
+const ENEMY_SCENE := preload("res://scenes/EnemyPiece.tscn")
 
 @export var spawn_colors: int = 5
 @export var danger_rise_per_second: float = 0.03
@@ -17,6 +18,9 @@ const PIECE_SCENE := preload("res://scenes/Piece.tscn")
 @export var pressure_interval_seconds: float = 7.0
 @export var speed_step_interval_seconds: float = 30.0
 @export var speed_multiplier_per_step: float = 1.15
+
+@export var enemy_spawn_interval_seconds: float = 8.0
+@export var enemy_bottom_damage: float = 0.2
 
 var grid: Array = []
 var selected_piece: Piece
@@ -30,6 +34,7 @@ var is_game_over := false
 var time_without_match := 0.0
 var elapsed_play_time := 0.0
 var speed_level := 0
+var enemy_spawn_timer := 0.0
 
 func _ready() -> void:
 	randomize()
@@ -54,6 +59,11 @@ func _process(delta: float) -> void:
 		time_without_match = 0.0
 		_push_pressure_row_from_top()
 
+	enemy_spawn_timer += delta
+	if enemy_spawn_timer >= enemy_spawn_interval_seconds:
+		enemy_spawn_timer = 0.0
+		_spawn_random_enemy_inside_board()
+
 func start_new_run() -> void:
 	_clear_board_nodes()
 	_initialize_grid()
@@ -63,6 +73,7 @@ func start_new_run() -> void:
 	time_without_match = 0.0
 	elapsed_play_time = 0.0
 	speed_level = 0
+	enemy_spawn_timer = 0.0
 	is_resolving = false
 	is_game_over = false
 	is_playing = false
@@ -105,11 +116,24 @@ func _create_piece(x: int, y: int, animated := true) -> Piece:
 	piece.piece_selected.connect(_on_piece_selected)
 	return piece
 
+func _create_enemy(x: int, y: int, enemy_type: EnemyPiece.EnemyType, animated := true) -> EnemyPiece:
+	var enemy := ENEMY_SCENE.instantiate() as EnemyPiece
+	add_child(enemy)
+	enemy.z_index = 2
+	enemy.configure(enemy_type)
+	enemy.position = _grid_to_position(x, y)
+	if animated:
+		enemy.position.y -= CELL_SIZE.y * 2
+		enemy.create_tween().tween_property(enemy, "position", _grid_to_position(x, y), 0.2)
+	return enemy
+
 func _grid_to_position(x: int, y: int) -> Vector2:
 	return Vector2(x * CELL_SIZE.x + CELL_SIZE.x / 2.0, y * CELL_SIZE.y + CELL_SIZE.y / 2.0)
 
 func _on_piece_selected(piece: Piece) -> void:
 	if not is_playing or is_resolving or is_game_over:
+		return
+	if piece is EnemyPiece:
 		return
 	var coords := _find_piece(piece)
 	if coords == Vector2i(-1, -1):
@@ -143,6 +167,8 @@ func _find_piece(target: Piece) -> Vector2i:
 	return Vector2i(-1, -1)
 
 func _swap_and_resolve(a: Vector2i, b: Vector2i) -> void:
+	if grid[a.y][a.x] is EnemyPiece or grid[b.y][b.x] is EnemyPiece:
+		return
 	is_resolving = true
 	_swap_cells(a, b)
 	_animate_swap(a, b)
@@ -155,8 +181,10 @@ func _swap_and_resolve(a: Vector2i, b: Vector2i) -> void:
 		combo = 0
 		combo_changed.emit(combo)
 		is_resolving = false
+		await _advance_enemy_turn()
 		return
 	await _resolve_board_loop()
+	await _advance_enemy_turn()
 	is_resolving = false
 
 func _swap_cells(a: Vector2i, b: Vector2i) -> void:
@@ -180,6 +208,7 @@ func _resolve_board_loop() -> void:
 		chain += 1
 		combo = chain
 		combo_changed.emit(combo)
+		_apply_match_damage_to_enemies(matches)
 		_clear_matches(matches)
 		score += matches.size() * 10 * chain
 		score_changed.emit(score)
@@ -204,7 +233,8 @@ func _find_all_matches() -> Array[Vector2i]:
 		var run_len := 0
 		for x in WIDTH:
 			var piece: Piece = grid[y][x]
-			var color := piece.color_id if piece else -1
+			var is_enemy := piece is EnemyPiece
+			var color := piece.color_id if piece and not is_enemy else -1
 			if color == run_color and color != -1:
 				run_len += 1
 			else:
@@ -224,7 +254,8 @@ func _find_all_matches() -> Array[Vector2i]:
 		var run_len_v := 0
 		for y in HEIGHT:
 			var piece: Piece = grid[y][x]
-			var color := piece.color_id if piece else -1
+			var is_enemy := piece is EnemyPiece
+			var color := piece.color_id if piece and not is_enemy else -1
 			if color == run_color_v and color != -1:
 				run_len_v += 1
 			else:
@@ -248,6 +279,24 @@ func _clear_matches(matches: Array[Vector2i]) -> void:
 			await get_tree().create_timer(0.03).timeout
 			piece.queue_free()
 		grid[cell.y][cell.x] = null
+
+func _apply_match_damage_to_enemies(matches: Array[Vector2i]) -> void:
+	var processed := {}
+	for cell in matches:
+		for dir in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			var adj := cell + dir
+			if not _is_inside(adj):
+				continue
+			var piece := grid[adj.y][adj.x]
+			if piece is EnemyPiece and not processed.has(adj):
+				processed[adj] = true
+				var enemy := piece as EnemyPiece
+				if enemy.take_damage(1):
+					enemy.queue_free()
+					grid[adj.y][adj.x] = null
+
+func _is_inside(cell: Vector2i) -> bool:
+	return cell.x >= 0 and cell.x < WIDTH and cell.y >= 0 and cell.y < HEIGHT
 
 func _apply_gravity() -> void:
 	for x in WIDTH:
@@ -299,6 +348,59 @@ func _push_pressure_row_from_top() -> void:
 
 	await get_tree().create_timer(0.12).timeout
 	await _resolve_board_loop()
+
+func _spawn_random_enemy_inside_board() -> void:
+	if is_resolving or is_game_over:
+		return
+	var available: Array[Vector2i] = []
+	for y in range(1, HEIGHT - 2):
+		for x in WIDTH:
+			if grid[y][x] == null:
+				available.append(Vector2i(x, y))
+	if available.is_empty():
+		return
+	var cell := available[randi() % available.size()]
+	var roll := randi() % 100
+	var enemy_type := EnemyPiece.EnemyType.SLIME
+	if roll < 50:
+		enemy_type = EnemyPiece.EnemyType.SLIME
+	elif roll < 80:
+		enemy_type = EnemyPiece.EnemyType.BAT
+	else:
+		enemy_type = EnemyPiece.EnemyType.GOLEM
+	grid[cell.y][cell.x] = _create_enemy(cell.x, cell.y, enemy_type, true)
+
+func _advance_enemy_turn() -> void:
+	var to_move: Array[Vector2i] = []
+	for y in range(HEIGHT - 2, -1, -1):
+		for x in WIDTH:
+			var piece := grid[y][x]
+			if piece is EnemyPiece:
+				var enemy := piece as EnemyPiece
+				if enemy.should_move_this_turn():
+					to_move.append(Vector2i(x, y))
+	for origin in to_move:
+		var enemy_piece := grid[origin.y][origin.x]
+		if not (enemy_piece is EnemyPiece):
+			continue
+		var enemy := enemy_piece as EnemyPiece
+		var next := origin + Vector2i.DOWN
+		enemy.consume_turn()
+		if next.y >= HEIGHT:
+			grid[origin.y][origin.x] = null
+			enemy.queue_free()
+			_apply_enemy_reach_bottom_penalty()
+			continue
+		if grid[next.y][next.x] == null:
+			grid[next.y][next.x] = enemy
+			grid[origin.y][origin.x] = null
+			enemy.create_tween().tween_property(enemy, "position", _grid_to_position(next.x, next.y), 0.12)
+
+func _apply_enemy_reach_bottom_penalty() -> void:
+	danger = clamp(danger + enemy_bottom_damage, 0.0, 1.0)
+	danger_changed.emit(danger)
+	if danger >= 1.0:
+		_trigger_game_over()
 
 func _trigger_game_over() -> void:
 	if is_game_over:
